@@ -1,5 +1,5 @@
-## Analog Devices & APRILAI Project ##
-# Intern 1 - Jenna Shaikh
+# Analog Devices & APRILAI Project ##
+#### Jenna Shaikh - Intern 1
 
 ## Overview
 This project is designed to:
@@ -45,7 +45,6 @@ git clone https://github.com/your-username/your-repo.git
 cd your-repo
 ```
 
-## How to Run
 
 ### Extractor
 ```bash
