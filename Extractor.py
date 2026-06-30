@@ -673,11 +673,6 @@ def parse_pdf(pdf_path):
         layout = page.get_text("dict")
         text   = page.get_text("text")
 
-        if page_num + 1 == 29:
-            print("\nPAGE 29 TEXT LINES")   
-            for i, line in enumerate(text.splitlines()[:120]):
-                print(i, repr(line))
-
         headings = extract_headings_from_layout(layout)
 
         text_heading = extract_heading_from_text(text)
