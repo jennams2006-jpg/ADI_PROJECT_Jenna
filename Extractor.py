@@ -673,40 +673,18 @@ def parse_pdf(pdf_path):
     for page_num in range(len(pdf)):
 
         page   = pdf[page_num]
-        layout = page.get_text("dict")
         text   = page.get_text("text")
 
-        headings = extract_headings_from_layout(layout)
-
         text_heading = extract_heading_from_text(text)
-
-        if text_heading:
-            headings = [text_heading]
-
-        # Fallback: detect section heading directly from page text
-        if not headings:
-            for line in text.splitlines()[:20]:
-                line = line.strip()
-
-                # skip chapter/page headers
-                if line.lower().startswith("chapter"):
-                    continue
-
-                match = SECTION_REGEX.match(line)
-                if match:
-                    headings = [{
-                        "section_id": match.group(1),
-                        "title": match.group(2),
-                        "font_size": None
-                    }]
-                    break
+        headings = [text_heading] if text_heading else []
+ 
         if headings:
             current_section = headings[-1]["section_id"]
         elif current_section is None:
             current_section = "Unknown"
-
-    
-        requirements = extract_requirements(text, current_section) 
+ 
+        requirements = extract_requirements(text, current_section)
+ 
         
         notes         = extract_notes(text)
         acronyms      = extract_acronyms(text)
