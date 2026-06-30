@@ -11,3 +11,4 @@ CHANGE LOG:  (ELsa and Jenna)
 
 CURRENT:
 -fixing figure cropping
+-fixed semantic chunking (changed quality checker metric for completeness to measure if text for each semantic chunk and changed extractor to write page number(s) for each semantic chunk produced)
