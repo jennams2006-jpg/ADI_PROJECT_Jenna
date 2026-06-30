@@ -584,7 +584,7 @@ def extract_heading_from_text(text):
     Fallback heading detector using raw page text.
     Useful when PyMuPDF layout misses section headings.
     """
-    
+found_headings = []
 
     for line in text.splitlines()[:80]:
         line = line.strip()
@@ -620,7 +620,7 @@ def extract_heading_from_text(text):
                 "font_size": None
             }
 
-    return None
+    return found_headings if found_headings else None
 # ==========================================================
 # MAIN PARSER
 # ==========================================================
@@ -657,8 +657,7 @@ def parse_pdf(pdf_path):
         page   = pdf[page_num]
         text   = page.get_text("text")
 
-        text_heading = extract_heading_from_text(text)
-        headings = [text_heading] if text_heading else []
+        headings = extract_headings_from_text(text)
  
         if headings:
             current_section = headings[-1]["section_id"]
