@@ -45,27 +45,25 @@ git clone https://github.com/your-username/your-repo.git
 cd your-repo
 ```
 
-Extractor
+## How to Run
 
+### Extractor
 ```bash
-/home/eng-6990/PROJECT/extractor/.venv/bin/python "/home/eng-6990/PROJECT/extractor/(E)extractor improved changes.py"
+python extractor.py --input data/input.json
 ```
 
-Comparator
-
+### Comparator
 ```bash
-python3 Spec_Version_Comparer.py /home/eng-6990/PROJECT/extractor/RISC-V_VER.1.json /home/eng-6990/PROJECT/extractor/RISC-V_VER.2.json
+python Spec_Version_Comparer.py --spec spec.json --extractor output.json
 ```
 
-Quality Checker
-
+### Quality Checker
 ```bash
-python3 extractor_quality_check.py \
-  --json "/home/eng-6990/PROJECT/extractor/document.json" \
-  --pdf "/home/eng-6990/PROJECT/PROJECT briefs and info./amba_axi_protocol_spec.pdf"
+python extractor_quality_check.py \
+  --json data/document.json \
+  --pdf docs/spec.pdf
 ```
-
-Additional Quality Checker Features:
+### Additional Quality Checker Features:
 
 ```bash
   --csv path/to/requirements.csv \
