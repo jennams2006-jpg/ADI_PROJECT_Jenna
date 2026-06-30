@@ -704,10 +704,7 @@ def parse_pdf(pdf_path):
             current_section = "Unknown"
 
     
-        requirements = [
-            r for r in requirements
-            if is_valid_vplan_section(r.get("section"))
-        ]
+        requirements = extract_requirements(text, current_section) 
         
         notes         = extract_notes(text)
         acronyms      = extract_acronyms(text)
