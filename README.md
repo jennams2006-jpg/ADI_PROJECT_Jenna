@@ -2,9 +2,8 @@
 ### Jenna Shaikh - Intern 1
 
 ## Overview
-This project is designed to:
+This project is designed to develop an AI-driven tool capable of:
 
-Develop an AI-driven tool capable of:
  - Extracting and parsing semiconductor specifications
  - Identifying and categorising inconsistencies and ambiguities between different versions of a specification
  - Generating a verification plan (vPlan) from the specification
@@ -41,7 +40,7 @@ This project is specific to:
 | Module | Input | Output | Purpose |
 | --- | --- | --- | --- |
 | Extractor | Specification PDF / JSON | `document.json`, Figures, Tables, Images | Parses and structures specification content |
-| Comparator | `Specification.json`, `Extractor Output.json` | CSV, JSON, MD | Detects added, removed, and modified items |
+| Comparator | `Specification.json`, `Extractor_Output.json` | CSV, JSON, MD | Detects added, removed, and modified items |
 | Quality Checker | PDF, JSON, CSV, gold JSON | JSON | Measures extraction completeness and accuracy |
 
 
