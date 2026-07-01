@@ -25,9 +25,9 @@ This project is specific to:
 - Organises extracted content into document.json and seperate files for images, figures, tables
 
 ### Task 2: Comparator
-- Normalises text
 - Builds unique key for each item so can match identical items across versions even if it has different position
-- Checks if item was removed, added, modified for all types of content in file
+- States if item was removed, added, modified for all types of content in file
+- Lists a similarity percentage for each change (% of similarity of same page of different versions)
 - Script attempts a guess at modification reasons
 - Detected changes -> Report = in 3 formats, CSV, JSON, MD
 
