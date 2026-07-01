@@ -1,5 +1,7 @@
 # Analog Devices & APRILAI Project ##
-### Jenna Shaikh - Intern 1
+### Jenna Shaikh 
+
+This repository is part of the **APRIL AI Hub** Summer Internship Programme (AI for Productive Research & Innovation in Electronics) and a research project funded by **Analog Devices**.
 
 ## Overview
 This project is designed to develop an AI-driven tool capable of:
