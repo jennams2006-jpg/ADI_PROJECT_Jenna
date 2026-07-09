@@ -1,10 +1,10 @@
-# Analog Devices & APRILAI Project
+#  Analog Devices & APRILAI Project
 
 This repository is part of the **APRIL AI Hub Summer Internship Programme (AI for Productive Research & Innovation in Electronics)** and supports a research project funded by **Analog Devices**.
 
 ---
 
-# Table of Contents
+# :mag: Table of Contents
 
 - [Overview](#overview)
 - [Supported Specifications](#supported-specifications)
@@ -33,7 +33,7 @@ This project develops an AI-driven pipeline capable of:
 
 ---
 
-# Supported Specifications
+# :file_folder: Supported Specifications
 
 Currently supported specification families include:
 
@@ -43,35 +43,35 @@ Currently supported specification families include:
 ---
 
 # Repository Workflow
-
-```text
-Specification PDF
-        │
-        ▼
-+----------------+
-|   Extractor    |
-+----------------+
-        │
-        ▼
- document.json
- tables/
- figures/
- images/
- requirements.csv
-        │
-        ├──────────────► Comparator
-        │                   │
-        │                   ▼
-        │            Change Report
-        │
-        ▼
- Quality Checker
-        │
-        ▼
-Quality Metrics
-(Completeness,
- Accuracy,
- Table/Figure Capture)
+    
+  ```
+                Specification PDF
+                        │
+                        ▼
+                +----------------+
+                |   Extractor    |
+                +----------------+
+                        │
+                        ▼
+                 document.json
+                 tables/
+                 figures/
+                 images/
+                 requirements.csv
+                        │
+                        ├──────────────► Comparator
+                        │                   │
+                        │                   ▼
+                        │            Change Report
+                        │
+                        ▼
+                 Quality Checker
+                        │
+                        ▼
+                Quality Metrics
+                 (Completeness,
+                    Accuracy,
+              Table/Figure Capture)
 ```
 
 ---
@@ -86,24 +86,42 @@ Quality Metrics
 
 ---
 
-# Extractor
 
-## Task 1: Extractor
+
+## :page_facing_up: Task 1: Extractor
 
 The Extractor is responsible for converting specification PDFs into a structured representation.
 
-### Responsibilities
+---
 
-- Ingests specification documents (AMBA AXI or RISC-V ISA).
-- Extracts and parses document content.
-- Organises extracted content into `document.json`.
-- Produces separate outputs for figures, tables, images, and CSV files where applicable.
+### 🔍 Core Responsibilities
+
+* **Data Ingestion:** Accepts technical specification documents such as AMBA AXI or RISC-V ISA files .
+* **Content Extraction:** Extracts text layers, structural tables, layout markers, and embedded graphics .
+* **Data Serialization:** Automatically maps and organizes all parsed elements into a single, unified `document.json` file .
+* **Asset Isolation:** Segregates data types to produce separate outputs for images, cropped figures, and tabular CSV files.
 
 ---
 
-# Quality Checker
+### 🚀 Key Features
 
-## Task 2: Quality Checker
+#### 1. Figure Isolation & Asset Generation
+* **AI-Guided Cropping:** Locates figure captions and uses a vision model to verify whether the corresponding figure lives above or below the caption.
+* **Vector Snapping:** Refines bounding boxes by aligning them with the PDF's internal vector paths and lines, striving for minimal figure cut offs.
+* **Smart Descriptions:** Contextualizes every extracted diagram via GPT-4, generating clear, accessible summaries detailing waveforms, registers, and block relationships.
+
+#### 2. Native Text & Automated Rule Classifier
+* **Label Capture:** Extracts text directly from figure boundaries using the PDF's vector layer, keeping signal names, bus tags, and axis markers perfectly readable without relying on standard OCR.
+* **Requirement Classification:** Scans text for mandatory project constraints (phrases using *shall*, *must*, or *should*) and automatically sorts them into functional buckets like *Security, Performance, Protocol,* or *Memory*.
+
+#### 3. Structural Hierarchy & Table Extraction
+* **Table-to-CSV Conversion:** Programmatically discovers tables embedded within the pages and exports them as individual, clean CSV spreadsheets.
+* **Document Mapping:** Automatically cross-references acronyms, design notes, and systemic citations while cleanly dividing the document into a logical parent-child section tree based on structural headings.
+---
+
+
+
+## :bar_chart: Task 2: Quality Checker
 
 The Quality Checker evaluates the quality of an extracted specification.
 
@@ -151,7 +169,7 @@ Measures whether the extractor captured all expected content from the source doc
 | **Record Field Completeness Score** | Required fields for every extracted object are populated (e.g. `text`, `caption`, `page`). |
 | **CSV Presence Score** | If CSV output is expected, CSV files exist and are non-empty. |
 
-## Formula
+## Completeness Function
 
 ```text
 completeness = mean(
@@ -185,7 +203,7 @@ When no reference extraction is available, accuracy is estimated using heuristic
 | **JSON Internal Consistency Score** | Cross-checks internal references between requirements, pages, captions, tables, and figures. |
 | **CSV/JSON Consistency Score** | CSV output matches the extracted JSON. |
 
-### Formula
+### Accuracy Function
 
 ```text
 accuracy = mean(
@@ -214,7 +232,26 @@ When a reference extraction is supplied (`--gold-json`), direct comparisons repl
 | **Page Text Fidelity Score** | Comparison between extracted page text and the reference page text. |
 | **JSON Internal Consistency Score** | Structural validation of the extracted JSON. |
 
-### Formula
+---
+
+## Understanding the $F_1$ Score
+
+The **$F_1$ Score** is a single metric used to evaluate how well a classification model performs.
+
+The $F_1$ score measures the balance between two goals:
+* **Precision:** Making sure your positive predictions are highly accurate (avoiding false alarms).
+* **Recall:** Making sure you actually find *all* the real positive cases (avoiding missed targets).
+
+
+### Formula for F1
+
+The $F_1$ score is the mean of Precision and Recall:
+
+$$F_1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
+
+---
+
+### GOLD JSON Function
 
 ```text
 accuracy = mean(
@@ -242,7 +279,7 @@ Measures how well tables and figures are detected, captioned, and exported.
 | **Figure Caption F1 Score** | Extracted figure captions compared against captions detected in the PDF. |
 | **Image Capture F1 Score** | Extracted image count compared against embedded images detected by PyMuPDF. |
 
-## Formula
+## Table/Figure Capture Function
 
 ```text
 table_figure_capture = mean(
@@ -270,9 +307,9 @@ When a **Gold JSON** is supplied, the accuracy metric switches from heuristic va
 
 ---
 
-# Comparator
 
-## Task 3: Comparator
+
+## :chart_with_upwards_trend: :chart_with_downwards_trend:   Task 3: Comparator
 
 The Comparator analyses two extracted specification versions and identifies differences.
 
