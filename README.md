@@ -103,7 +103,7 @@ The Extractor is responsible for converting specification PDFs into a structured
 
 ---
 
-### 🚀 Key Features
+###  Key Features
 
 #### 1. Figure Isolation & Asset Generation
 * **AI-Guided Cropping:** Locates figure captions and uses a vision model to verify whether the corresponding figure lives above or below the caption.
