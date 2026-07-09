@@ -28,6 +28,8 @@ import fitz
 import pandas as pd
 from PIL import Image, ImageDraw
 
+
+
 from dotenv import load_dotenv
 from openai import OpenAI
 # ==========================================================
