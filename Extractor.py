@@ -26,19 +26,20 @@ import io
 import base64
 import fitz
 import pandas as pd
-import pypdfium2 as pdfium
-import pytesseract
-from PIL import Image
+from PIL import Image, ImageDraw
+
+
 
 from dotenv import load_dotenv
 from openai import OpenAI
 # ==========================================================
 # CONFIGURATION
 # ==========================================================
-FILE_NAME = "riscv-2025.pdf"
-PDF_PATH = r"/home/eng-6990/PROJECT/PROJECT_briefs_and_info./riscv-2025.pdf"
+DEBUG = False  # Set to true to see figure extraction details
+FILE_NAME = "amba_axi_a2.pdf"
+PDF_PATH = r"/home/eng-6990/PROJECT/PROJECT_briefs_and_info./amba_axi_a2.pdf"
 
-OUTPUT_DIR = "RISC-V_2025_OUTPUT"
+OUTPUT_DIR = "amba_a2_OUTPUT"
 
 IMAGE_FOLDER  = os.path.join(OUTPUT_DIR, "images")
 TABLE_FOLDER  = os.path.join(OUTPUT_DIR, "tables")
@@ -52,7 +53,7 @@ os.makedirs(FIGURE_FOLDER,exist_ok=True)
 # Load environment variables
 load_dotenv()
 
-MODEL_NAME = "gpt-4.1-mini"
+MODEL_NAME = "gpt-4.1"
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
 
@@ -93,18 +94,19 @@ SECTION_REGEX = re.compile(
     r'^((?:\d+(?:\.\d+)*|[A-C]\d+(?:\.\d+)*))\s+(.+)$'
 )
 
-FIGURE_CAPTION_REGEX = re.compile(
-    r'^Figure\s+[A-Za-z]?\d+(?:\.\d+)*\s*[:.](?:\s|$)',
-    re.IGNORECASE
-)
 
 TABLE_REGEX = re.compile(
-    r'(Table)\s+([A-Za-z]?\d+(?:[-.]\d+)*)',
-    re.IGNORECASE
+    r"^Table\s+[A-Za-z]?\d+(?:[-.]\d+)*(?:[:.]?\s+.*)?$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 TABLE_CAPTION_REGEX = re.compile(
-    r'^Table\s+[A-Za-z]?\d+(?:[-.]\d+)*\.(?:\s|$)',
+    r'^Table\s+[A-Za-z]?\d+(?:[-.]\d+)*[:.]?\s*.*$',
+    re.IGNORECASE
+)
+
+FIGURE_CAPTION_REGEX = re.compile(
+    r'^Figure\s+[A-Za-z]?\d+(?:[.\-]\d+)*\s*[:.]\s',
     re.IGNORECASE
 )
 
@@ -182,6 +184,557 @@ def extract_document_metadata(pdf):
     }
 
 
+def find_figure_captions(pdf_page):
+    """
+    Find figure caption lines using PyMuPDF text extraction, then locate
+    their exact rect on the page with search_for(). This anchors the whole
+    pipeline to a known point instead of scanning the entire page.
+    """
+    text = pdf_page.get_text("text")
+    captions = []
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or not FIGURE_CAPTION_REGEX.match(line):
+            continue
+
+        hits = pdf_page.search_for(line)
+        if not hits:
+            short_match = re.match(
+                r'(Figure\s+[A-Za-z]?\d+(?:[.\-]\d+)*)', line, re.IGNORECASE
+            )
+            search_text = short_match.group(1) if short_match else line
+            hits = pdf_page.search_for(search_text)
+
+        if hits:
+            captions.append({"caption": line, "rect": hits[-1]})
+
+    return captions
+
+
+def build_search_window(pdf_page, caption_rect, window_pt=200,
+                         upper_bound=None, lower_bound=None, position=None):
+    """
+    Build a search region around the caption, but clamp it so it never
+    crosses into a neighboring caption's territory. upper_bound/lower_bound
+    are absolute y-limits (typically the midpoint to the previous/next
+    caption on the page) that prevent two nearby figures from sharing
+    the same window and producing duplicate crops.
+    """
+    full_rect = pdf_page.rect
+    
+    if position == "above":
+        up_pt, down_pt = window_pt, window_pt * 0.15
+    elif position == "below":
+        up_pt, down_pt = window_pt * 0.15, window_pt
+    else:
+        up_pt, down_pt = window_pt, window_pt * 0.8
+    
+    y0 = max(full_rect.y0, caption_rect.y0 - window_pt)
+    y1 = min(full_rect.y1, caption_rect.y1 + window_pt * 0.8)
+
+    if upper_bound is not None:
+        y0 = max(y0, upper_bound)
+    if lower_bound is not None:
+        y1 = min(y1, lower_bound)
+
+    return fitz.Rect(full_rect.x0, y0, full_rect.x1, y1)
+
+
+def _rects_touch_or_close(r1, r2, tol=8):
+    expanded = fitz.Rect(r1.x0 - tol, r1.y0 - tol, r1.x1 + tol, r1.y1 + tol)
+    return expanded.intersects(r2)
+
+
+def find_geometric_bbox(
+    pdf_page,
+    search_window,
+    caption_rect,
+    seed_bbox=None,
+    figure_position=None,
+    min_overlap_ratio=0.5,
+    touch_tol=40 #16 -> 20
+):
+    """
+    Refine the bbox chosen by vision with local PDF geometry only.
+
+    The vision result is the source of truth for which figure belongs to
+    this caption. Geometry is used only to snap/expand the crop to nearby
+    vector drawings, embedded images, and labels, which keeps neighboring
+    figures from being merged in dense engineering specs.
+    """
+    drawings = pdf_page.get_drawings()
+    candidate_rects = []
+
+    for d in drawings:
+        r = d.get("rect")
+        if not r or r.is_empty:
+            continue
+        if not r.intersects(search_window):
+            continue
+        if r.intersects(caption_rect):
+            continue
+
+        overlap = r & search_window
+        overlap_ratio = (overlap.get_area() / r.get_area()) if r.get_area() > 0 else 0
+        if overlap_ratio < min_overlap_ratio:
+            continue
+
+        candidate_rects.append(overlap)
+
+    image_rects = []
+    for img in pdf_page.get_images(full=True):
+        xref = img[0]
+        try:
+            for r in pdf_page.get_image_rects(xref):
+                if not r.intersects(search_window) or r.intersects(caption_rect):
+                    continue
+                overlap = r & search_window
+                overlap_ratio = (overlap.get_area() / r.get_area()) if r.get_area() > 0 else 0
+                if overlap_ratio < min_overlap_ratio:
+                    continue
+                image_rects.append(overlap)
+        except Exception:
+            pass
+
+    all_rects = candidate_rects + image_rects
+    if seed_bbox is None:
+        return None
+
+    seed = fitz.Rect(seed_bbox)
+    seed &= search_window
+    if seed.is_empty:
+        return None
+
+    if figure_position == "above":
+        all_rects = [r for r in all_rects if r.y1 <= caption_rect.y0]
+    elif figure_position == "below":
+        all_rects = [r for r in all_rects if r.y0 >= caption_rect.y1]
+
+    expanded_seed = fitz.Rect(
+        seed.x0 - touch_tol * 2,
+        seed.y0 - touch_tol * 2,
+        seed.x1 + touch_tol * 2,
+        seed.y1 + touch_tol * 2,
+    )
+    overlapping = [r for r in all_rects if r.intersects(expanded_seed)]
+
+    if overlapping:
+        region = fitz.Rect(overlapping[0])
+        for r in overlapping[1:]:
+            region |= r
+        region |= seed
+        remaining = [r for r in all_rects if r not in overlapping]
+    else:
+        region = fitz.Rect(seed)
+        remaining = all_rects
+
+    # Nearby text labels (signal names, block labels) that sit just outside
+    # the vector geometry but are visually part of the figure. Excluded:
+    # anything overlapping the caption itself.
+    label_rects = [
+        fitz.Rect(b[:4]) for b in pdf_page.get_text("blocks")
+        if fitz.Rect(b[:4]).intersects(search_window)
+        and not fitz.Rect(b[:4]).intersects(caption_rect)
+    ]
+
+    # ---- Grow by touching/overlapping drawings AND nearby text labels ----
+    changed = True
+    while changed:
+        changed = False
+        still_pending = []
+        for r in remaining:
+            if _rects_touch_or_close(region, r, tol=touch_tol):
+                region |= r
+                changed = True
+            else:
+                still_pending.append(r)
+        remaining = still_pending
+
+        still_pending = []
+        for r in label_rects:
+            if _rects_touch_or_close(region, r, tol=touch_tol):
+                region |= r
+                changed = True
+            else:
+                still_pending.append(r)
+        label_rects = still_pending
+
+    bbox = region
+    pad_x = max(12, bbox.width * 0.04)
+    pad_y = max(12, bbox.height * 0.06)
+
+    bbox.x0 = max(pdf_page.rect.x0, bbox.x0 - pad_x)
+    bbox.y0 = max(pdf_page.rect.y0, bbox.y0 - pad_y)
+    bbox.x1 = min(pdf_page.rect.x1, bbox.x1 + pad_x)
+    bbox.y1 = min(pdf_page.rect.y1, bbox.y1 + pad_y)
+    return bbox
+
+
+def classify_figure_position(pdf_page, caption_rect, context_pt=350, scale=4):
+    """
+    FIRST vision call — classification only, nothing else.
+ 
+    Crops a moderate, symmetric vertical strip centered on the caption
+    (outlined in red so the model has an unambiguous anchor) and asks a
+    single question: relative to that caption, is the figure it describes
+    above, below, overlapping/adjacent, or not visible in this crop at all.
+ 
+    Keeping this call cheap and narrowly scoped means the model is never
+    asked to do two things at once (decide direction AND find a precise
+    box in a noisy, oversized image). The direction decided here is what
+    lets the second call crop tightly to just the correct side.
+    """
+    full_rect = pdf_page.rect
+    y0 = max(full_rect.y0, caption_rect.y0 - context_pt)
+    y1 = min(full_rect.y1, caption_rect.y1 + context_pt)
+    strip = fitz.Rect(full_rect.x0, y0, full_rect.x1, y1)
+ 
+    mat = fitz.Matrix(scale, scale)
+    pix = pdf_page.get_pixmap(matrix=mat, clip=strip, alpha=False)
+    img = Image.open(io.BytesIO(pix.tobytes("png")))
+ 
+    caption_px = (
+        int((caption_rect.x0 - strip.x0) * scale),
+        int((caption_rect.y0 - strip.y0) * scale),
+        int((caption_rect.x1 - strip.x0) * scale),
+        int((caption_rect.y1 - strip.y0) * scale),
+    )
+    draw = ImageDraw.Draw(img)
+    draw.rectangle(caption_px, outline="red", width=max(3, scale))
+ 
+    prompt = (
+        "This is a cropped section of a technical PDF page, "
+        f"{pix.width}x{pix.height} pixels. The caption outlined in red "
+        "belongs to a figure — a diagram, block diagram, waveform, "
+        "register layout, plot, timing diagram, or other engineering "
+        "graphic.\n\n"
+        "Relative to the red caption box, is the figure it describes:\n"
+        "- ABOVE the red box\n"
+        "- BELOW the red box\n"
+        "- OVERLAPPING or immediately adjacent to the red box (e.g. beside it)\n"
+        "- NOT VISIBLE anywhere in this crop\n\n"
+        'Respond with ONLY one word: "above", "below", "overlapping", or "none".'
+    )
+ 
+    try:
+        answer = vision(prompt, img, max_tokens=5).strip().lower()
+    except Exception as e:
+        if DEBUG:
+            print("Position classification error:", e)
+        return "none"
+ 
+    for label in ("above", "below", "overlapping", "none"):
+        if label in answer:
+            return label
+    return "none"
+ 
+ 
+
+
+
+ 
+def locate_figure_via_vision(pdf_page, search_window, caption, caption_rect, figure_position, scale=6):
+    """
+    SECOND vision call — precise localization only.
+ 
+    By this point, `figure_position` has already been decided by
+    classify_figure_position(), and `search_window` has already been
+    cropped tightly to that side of the caption. This call's only job is
+    to find the exact bounding box of the figure's graphical artwork
+    within that narrow, already-correct region — it is not asked to
+    reconsider direction.
+    """
+    mat = fitz.Matrix(scale, scale)
+    pix = pdf_page.get_pixmap(matrix=mat, clip=search_window, alpha=False)
+    crop_img = Image.open(io.BytesIO(pix.tobytes("png")))
+ 
+    caption_px = (
+        int((caption_rect.x0 - search_window.x0) * scale),
+        int((caption_rect.y0 - search_window.y0) * scale),
+        int((caption_rect.x1 - search_window.x0) * scale),
+        int((caption_rect.y1 - search_window.y0) * scale),
+    )
+    draw = ImageDraw.Draw(crop_img)
+    draw.rectangle(caption_px, outline="red", width=max(3, scale))
+ 
+    buf = io.BytesIO()
+    crop_img.save(buf, format="PNG")
+    crop_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+ 
+    prompt = (
+        "You are given a cropped region of a technical specification PDF "
+        f"page, rendered at {pix.width}x{pix.height} pixels. The caption "
+        f'outlined in red reads: "{caption}". This region has already been '
+        f"narrowed to the {figure_position} side of that caption, where "
+        "the figure it describes is known to be located.\n\n"
+        "This crop contains exactly one figure belonging to the red-boxed "
+        "caption. Locate only the graphical artwork directly associated "
+        "with the highlighted caption.\n\n"
+        "The figure consists of diagrams, block diagrams, waveforms, "
+        "register layouts, plots, timing diagrams, arrows, connectors, "
+        "axes, or other engineering graphics.\n\n"
+        "Ignore all paragraphs.\n"
+        "Ignore all body text.\n"
+        "Ignore references such as \"see Figure 3-2\".\n"
+        "Ignore headers.\n"
+        "Ignore footers.\n"
+        "Ignore page numbers.\n\n"
+        "Return a bounding box that encloses ALL graphical components "
+        "belonging to this figure. Do NOT return a paragraph.\n\n"
+        "The figure may be separated from its caption by one or more "
+        "explanatory paragraphs. Those paragraphs are NOT part of the "
+        "figure. Continue searching past them until you find the actual "
+        "graphical artwork associated with the caption.\n\n"
+        "Return the smallest rectangle that completely contains every "
+        "graphical element belonging to the figure. If in doubt, make the "
+        "box slightly larger rather than risk cropping off any part of "
+        "the figure.\n\n"
+        "Respond with ONLY a JSON object (no markdown fences, no extra "
+        "text) in exactly this form:\n"
+        '{"found": true|false, "confidence": 0.0, '
+        '"x0": int, "y0": int, "x1": int, "y1": int}\n\n'
+        "x0,y0,x1,y1 are pixel coordinates relative to THIS cropped image "
+        "(top-left origin), bounding the figure only. confidence is 0.0 "
+        "to 1.0.\n\n"
+        'If no graphical artwork exists in this crop, return '
+        '{"found": false, "confidence": 0.0, "x0": null, "y0": null, '
+        '"x1": null, "y1": null}'
+    )
+ 
+    try:
+        response = client.chat.completions.create(
+            model=MODEL_NAME,
+            max_completion_tokens=300,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{crop_b64}"}},
+                    ],
+                }
+            ],
+        )
+        raw = response.choices[0].message.content
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if not match:
+            return None
+        result = json.loads(match.group())
+    except Exception as e:
+        if DEBUG:
+            print("Vision localization error:", e)
+        return None
+ 
+    if not result.get("found", False):
+        return None
+    if None in (result.get("x0"), result.get("y0"), result.get("x1"), result.get("y1")):
+        return None
+ 
+    try:
+        result_x0 = float(result["x0"])
+        result_y0 = float(result["y0"])
+        result_x1 = float(result["x1"])
+        result_y1 = float(result["y1"])
+    except (TypeError, ValueError):
+        return None
+ 
+    # crop-local pixels -> page-absolute PDF points
+    x0 = search_window.x0 + result_x0 / scale
+    y0 = search_window.y0 + result_y0 / scale
+    x1 = search_window.x0 + result_x1 / scale
+    y1 = search_window.y0 + result_y1 / scale
+ 
+    bbox = fitz.Rect(x0, y0, x1, y1)
+    bbox &= search_window
+ 
+    if bbox.is_empty or bbox.width < 15 or bbox.height < 15:
+        return None
+ 
+    try:
+        confidence = float(result.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+ 
+    return {
+        "bbox": bbox,
+        "position": figure_position,
+        "confidence": max(0.0, min(1.0, confidence)),
+    }
+ 
+ 
+def extract_page_figures(
+    pdf_page,
+    page_num,
+    output_folder,
+    section_id,
+    scale=6,
+    margin=70, #from 8 -> 50
+    window_pt=500 # from 650 -> 800
+):
+    """
+    Caption-first, two-stage vision pipeline:
+      1. find caption (PyMuPDF)
+      2. classify_figure_position(): cheap call, decides above/below/
+         overlapping/none using a moderate symmetric context crop
+      3. build a search window biased tightly toward that side
+      4. locate_figure_via_vision(): detailed call, scoped to just that
+         narrow window, returns the precise bounding box only
+      5. PDF geometry refines/expands that vision-selected crop
+      6. crop, extract vector text, describe, save
+    """
+    captions = find_figure_captions(pdf_page)
+ 
+    # Ensure captions are ordered from top to bottom
+    captions.sort(key=lambda c: c["rect"].y0)
+ 
+    figures = []
+ 
+    for idx, cap_info in enumerate(captions):
+        caption = cap_info["caption"]
+        caption_rect = cap_info["rect"]
+ 
+        # ----------------------------------------------------
+        # Prevent one figure from searching into another figure
+        # by limiting the search window halfway between captions.
+        # ----------------------------------------------------
+        upper_bound = None
+        lower_bound = None
+ 
+        if idx > 0:
+            prev_rect = captions[idx - 1]["rect"]
+            upper_bound = (prev_rect.y1 + caption_rect.y0) / 2
+ 
+        if idx < len(captions) - 1:
+            next_rect = captions[idx + 1]["rect"]
+            lower_bound = (caption_rect.y1 + next_rect.y0) / 2
+ 
+        # ---- 1st vision call: classify position only ----
+        figure_position = classify_figure_position(pdf_page, caption_rect)
+        if DEBUG:
+            print(f"\n{caption}")
+            print("figure_position:", figure_position)
+ 
+        search_window = None
+        vision_result = None
+ 
+        if figure_position != "none":
+            # ---- crop only that half, biased toward the determined side ----
+            search_window = build_search_window(
+                pdf_page,
+                caption_rect,
+                window_pt=window_pt,
+                upper_bound=upper_bound,
+                lower_bound=lower_bound,
+                position=figure_position,
+            )
+ 
+            # ---- 2nd vision call: precise localization within that half ----
+            vision_result = locate_figure_via_vision(
+                pdf_page,
+                search_window,
+                caption,
+                caption_rect,
+                figure_position=figure_position,
+                scale=scale
+            )
+ 
+        bbox = vision_result["bbox"] if vision_result else None
+        vision_confidence = vision_result["confidence"] if vision_result else 0.0
+ 
+        if DEBUG:
+            print("search_window:", tuple(search_window) if search_window else None)
+            print("vision_bbox:", tuple(bbox) if bbox else None)
+            print("vision_confidence:", vision_confidence)
+ 
+        if bbox is not None:
+            refined_bbox = find_geometric_bbox(
+                pdf_page,
+                search_window,
+                caption_rect,
+                seed_bbox=bbox,
+                figure_position=figure_position,
+            )
+            if refined_bbox is not None:
+                bbox = refined_bbox
+                if DEBUG:
+                    print("refined_bbox:", tuple(bbox))
+ 
+        if bbox is None:
+            if DEBUG:
+                print(f"FIGURE NOT LOCATED: {caption} on page {page_num + 1}")
+            fig = {
+                "caption": caption,
+                "file": None,
+                "clip_rect": None,
+                "section": section_id,
+                "page": page_num + 1,
+                "ocr_text": "",
+                "accessibility_description": "",
+                "located_via": "none",
+                "figure_position": figure_position,
+                "vision_confidence": vision_confidence
+            }
+            fig["visual_requirement_hints"] = extract_visual_requirement_hints(fig)
+            figures.append(fig)
+            continue
+ 
+        clip_rect = fitz.Rect(
+            max(pdf_page.rect.x0, bbox.x0 - margin),
+            max(pdf_page.rect.y0, bbox.y0 - margin),
+            min(pdf_page.rect.x1, bbox.x1 + margin),
+            min(pdf_page.rect.y1, bbox.y1 + margin)
+        )
+ 
+        if DEBUG:
+            print(
+                f"FIGURE LOCATED: {caption} on page {page_num + 1} "
+                f"via vision+geometry bbox={tuple(bbox)}"
+            )
+ 
+        mat = fitz.Matrix(scale, scale)
+        pix = pdf_page.get_pixmap(matrix=mat, clip=clip_rect, alpha=False)
+        cropped = Image.open(io.BytesIO(pix.tobytes("png")))
+ 
+        safe_id = re.sub(r"[^\w\-]", "_", caption)[:40]
+        filename = f"figure_p{page_num+1}_{idx+1}_{safe_id}.png"
+        filepath = os.path.join(output_folder, filename)
+        cropped.save(filepath)
+ 
+        ocr_text = extract_text_from_figure_region(pdf_page, tuple(clip_rect))
+ 
+        description = describe_image_with_vision(
+            cropped,
+            f"Describe this technical figure.\nCaption: {caption}"
+        )
+ 
+        fig = {
+            "caption": caption,
+            "file": filepath,
+            "clip_rect": tuple(clip_rect),
+            "section": section_id,
+            "page": page_num + 1,
+            "ocr_text": ocr_text,
+            "accessibility_description": description,
+            "located_via": "vision+geometry",
+            "figure_position": figure_position,
+            "vision_confidence": vision_confidence
+        }
+        fig["visual_requirement_hints"] = extract_visual_requirement_hints(fig)
+ 
+        if DEBUG:
+            print("\nFIGURE:", fig["caption"])
+            print("SECTION:", fig["section"])
+            print("LOCATED VIA:", fig["located_via"])
+            print("FIGURE POSITION:", fig["figure_position"])
+            print("VISION CONFIDENCE:", fig["vision_confidence"])
+            print("OCR TEXT:", fig["ocr_text"])
+            print("HINTS:", fig["visual_requirement_hints"])
+ 
+        figures.append(fig)
+ 
+    return figures
+
 # ==========================================================
 # IMAGE EXTRACTION  (raster/embedded images)
 # ==========================================================
@@ -252,200 +805,6 @@ def extract_images(pdf):
     return image_records
 
 
-# ==========================================================
-# FIGURE REGION EXTRACTION
-#
-# Implements:
-#   caption -> nearest drawing -> grow outward by touching/
-#   intersecting drawings AND nearby text labels (single
-#   fixed-point loop, so newly-absorbed labels can pull in
-#   further drawings and vice versa) -> exclude the caption's
-#   own text -> pad by a small margin -> crop -> vision
-#   description. Falls back to a fixed-height box above the
-#   caption if no vector geometry is found, so a figure record
-#   is always produced instead of silently failing.
-# ==========================================================
-
-def _rects_touch(r1, r2, tol=3):
-    """True if r1 and r2 intersect, or are within `tol` points of touching."""
-    expanded = fitz.Rect(r1.x0 - tol, r1.y0 - tol, r1.x1 + tol, r1.y1 + tol)
-    return expanded.intersects(r2)
-
-
-def extract_figure_regions(
-    pdf_page,
-    page_num,
-    captions,
-    output_folder,
-    scale=4,
-    max_search_height_pt=650,   # hard ceiling so growth can't run away up the page
-    touch_tolerance=10,          # gap (pt) counted as "touching" for drawings
-    label_tolerance=15,  
-    proximity_tolerance=35,        # slightly looser gap for absorbing text labels
-    margin=18,                  # final padding around the grown region
-    fallback_height_pt=300      # used only when no vector geometry is found
-):
-    drawings = pdf_page.get_drawings()
-    drawing_rects = [d["rect"] for d in drawings if d.get("rect") and not d["rect"].is_empty]
-
-    text_blocks = pdf_page.get_text("blocks")
-    text_rects = [fitz.Rect(b[:4]) for b in text_blocks]
-
-    full_rect = pdf_page.rect
-
-    for idx, cap in enumerate(captions):
-        caption = cap["caption"]
-
-        short_match = re.match(
-            r"(Figure\s+[A-Za-z]?\d+(?:[.\-]\d+)*)",
-            caption,
-            re.IGNORECASE
-        )
-        search_text = short_match.group(1) if short_match else caption
-
-        hits = pdf_page.search_for(search_text)
-
-        if not hits:
-            # No anchor at all — nothing we can reasonably crop.
-            cap["file"] = None
-            cap["clip_rect"] = None
-            continue
-
-        caption_rect = hits[0]
-        ceiling_y = max(full_rect.y0, caption_rect.y0 - max_search_height_pt)
-
-        # --- Candidate pools, all strictly ABOVE the caption -------------
-        # (this is what keeps the caption text itself out of the crop:
-        #  anything whose bottom edge is at/after the caption's top edge
-        #  is excluded up front, and we re-check this for labels below).
-        drawing_candidates = [
-            r for r in drawing_rects
-            if r.y1 <= caption_rect.y0 + 5
-            and r.y0 >= ceiling_y
-        ]
-
-        label_candidates = [
-            r for r in text_rects
-            if r.y1 <= caption_rect.y0 + 5
-            and r.y0 >= ceiling_y
-            and not r.intersects(caption_rect)
-        ]
-
-        if not drawing_candidates:
-            # -------- Graceful fallback: no vector art on this page --------
-            # Try to build a region from nearby text labels only; if there
-            # are none either, fall back to a fixed-height box above the
-            # caption so we still produce a usable (if approximate) crop.
-            if label_candidates:
-                region = fitz.Rect(label_candidates[0])
-                for r in label_candidates[1:]:
-                    if _rects_touch(region, r, tol=label_tolerance):
-                        region |= r
-            else:
-                region = fitz.Rect(
-                    full_rect.x0,
-                    max(full_rect.y0, caption_rect.y0 - fallback_height_pt),
-                    full_rect.x1,
-                    caption_rect.y0
-                )
-        else:
-            # ---- Step 1: seed the region with the drawing nearest the caption ----
-            # Sort by distance from the caption
-            drawing_candidates.sort(key=lambda r: caption_rect.y0 - r.y1)
-
-            # Start with every drawing within 40 points of the nearest one
-            seed_limit = drawing_candidates[0].y1 + 40
-
-            seed_drawings = [
-                r for r in drawing_candidates
-                if r.y1 <= seed_limit
-            ]
-
-            region = fitz.Rect(seed_drawings[0])
-
-            for r in seed_drawings[1:]:
-                region |= r
-
-            remaining_drawings = [
-                r for r in drawing_candidates
-                if r not in seed_drawings
-            ]
-
-            remaining_labels = list(label_candidates)
-
-            # ---- Step 2 & 3 combined: grow by touching/intersecting drawings
-            #      AND nearby text labels, as a single fixed-point loop so
-            #      that absorbing one can enable absorbing the other. This
-            #      is what limits the crop to the connected figure cluster
-            #      instead of unioning every drawing above the caption. ----
-            changed = True
-            while changed:
-                changed = False
-
-                still_pending = []
-
-                for r in remaining_drawings:
-
-                    gap_x = max(0, max(region.x0 - r.x1, r.x0 - region.x1))
-                    gap_y = max(0, max(region.y0 - r.y1, r.y0 - region.y1))
-                    distance = max(gap_x, gap_y)
-
-                    if (
-                        _rects_touch(region, r, tol=touch_tolerance)
-                        or distance < proximity_tolerance
-                    ):
-                        region |= r
-                        changed = True
-                    else:
-                        still_pending.append(r)
-
-                remaining_drawings = still_pending
-
-                still_pending = []
-
-
-                for r in remaining_labels:
-
-                    gap_x = max(0, max(region.x0 - r.x1, r.x0 - region.x1))
-                    gap_y = max(0, max(region.y0 - r.y1, r.y0 - region.y1))
-                    distance = max(gap_x, gap_y)
-
-                    if (
-                        _rects_touch(region, r, tol=label_tolerance)
-                        or distance < proximity_tolerance
-                    ):
-                        region |= r
-                        changed = True
-                    else:
-                        still_pending.append(r)
-
-                remaining_labels = still_pending
-
-        # --- Step 4: pad by margin, clamp to page, extend down to caption ---
-        clip_rect = fitz.Rect(
-            max(full_rect.x0, region.x0 - margin),
-            max(full_rect.y0, region.y0 - margin),
-            min(full_rect.x1, region.x1 + margin),
-            min(full_rect.y1, max(region.y1 + margin, caption_rect.y1 + margin))
-        )   
-
-        # --- Step 5: crop ---
-        pix = pdf_page.get_pixmap(matrix=fitz.Matrix(scale, scale), clip=clip_rect)
-
-        safe_caption = re.sub(r"[^\w\-]", "_", caption)[:40]
-        filename = f"figure_p{page_num+1}_{idx+1}_{safe_caption}.png"
-        filepath = os.path.join(output_folder, filename)
-        pix.save(filepath)
-
-        cap["file"] = filepath
-        cap["clip_rect"] = tuple(clip_rect)
-
-        # --- Step 6: GPT accessibility description ---
-        img = Image.open(io.BytesIO(pix.tobytes("png")))
-        cap["accessibility_description"] = describe_image_with_vision(
-            img,
-            f"Describe this technical figure.\nCaption: {caption}"
-        )
 
 
 # ==========================================================
@@ -544,7 +903,7 @@ CATEGORY_KEYWORDS = {
     ],
     "Safety": [
         "safety", "hazard", "fault", "asil", "functional safety",
-        "redundan", "ecc", "parity", "error correction", "watchdog",
+        "redundant", "ecc", "parity", "error correction", "watchdog",
     ],
     "Security": [
         "encryption", "authentication", "secure boot", "pmp", "tee",
@@ -681,6 +1040,14 @@ def build_semantic_chunks(pages):
         })
 
     return chunks
+
+
+def print_semantic_chunk_pages(document):
+    pages = sorted({page for chunk in document.get("semantic_chunks", []) for page in chunk.get("pages", [])})
+    print("\nSEMANTIC CHUNK PAGES:", pages)
+    for idx, chunk in enumerate(document.get("semantic_chunks", []), start=1):
+        print(f"Chunk {idx}: section={chunk.get('section')} pages={chunk.get('pages')}")
+
 # ==========================================================
 # CAPTION EXTRACTORS
 # ==========================================================
@@ -693,22 +1060,25 @@ def is_valid_vplan_section(section):
        return False
    return VALID_VPLAN_SECTION_REGEX.match(str(section)) is not None
 
-def extract_figure_captions(text):
-    figures = []
-    for line in text.splitlines():
-        line = line.strip()
-        if FIGURE_CAPTION_REGEX.match(line):
-            figures.append({"caption": line, "file": None})
-    return figures
 
 def extract_table_captions(text):
     tables = []
+
     for line in text.splitlines():
         line = line.strip()
-        if TABLE_CAPTION_REGEX.match(line):
-            tables.append({"caption": line})
-    return tables
 
+        m = re.match(
+            r'^(Table\s+[A-Za-z]?\d+(?:[-.]\d+)*(?:[:.]?\s*.*)?)$',
+            line,
+            re.IGNORECASE
+        )
+
+        if m:
+            tables.append({
+                "caption": m.group(1).strip()
+            })
+
+    return tables
 
 def extract_visual_requirement_hints(figure):
     hints = []
@@ -811,27 +1181,13 @@ def parse_pdf(pdf_path):
         table_captions = extract_table_captions(text)
         extracted_tables = extract_tables(page, page_num)
 
-        figures = extract_figure_captions(text)
-
-        if figures:
-            extract_figure_regions(
-                pdf_page=page,
-                page_num=page_num,
-                captions=figures,
-                output_folder=FIGURE_FOLDER,
-                scale=4
-            )
-
-        for fig in figures:
-            fig["section"] = current_section
-            fig["page"] = page_num + 1
-            fig["ocr_text"] = extract_text_from_figure_region(page, fig.get("clip_rect"))
-            fig["visual_requirement_hints"] = extract_visual_requirement_hints(fig)
-
-            print("\nFIGURE:", fig["caption"])
-            print("SECTION:", fig["section"])
-            print("OCR TEXT:", fig["ocr_text"])
-            print("HINTS:", fig["visual_requirement_hints"])
+        figures = extract_page_figures(
+                    pdf_page=page,
+                    page_num=page_num,
+                    output_folder=FIGURE_FOLDER,
+                    section_id=current_section,
+                    scale=6
+                )
 
 
         page_images = [
@@ -868,6 +1224,8 @@ def parse_pdf(pdf_path):
     document["semantic_chunks"] = build_semantic_chunks(document["pages"])
 
     document["acronyms"] = sorted(set(document["acronyms"]))
+
+    print_semantic_chunk_pages(document)
 
     json_path = os.path.join(OUTPUT_DIR, "document.json")
     with open(json_path, "w", encoding="utf-8") as f:

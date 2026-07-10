@@ -60,6 +60,7 @@ import re
 from datetime import datetime
 
 
+
 # ==========================================================
 # CONFIGURATION
 # ==========================================================
@@ -926,6 +927,56 @@ def summarise_changes(changes):
 
     return summary
 
+
+def run_design_tool(old_json, new_json):
+    ensure_output_dir(OUTPUT_DIR)
+
+    old_document, old_path = load_json(old_json)
+    new_document, new_path = load_json(new_json)
+
+    changes = compare_documents(old_document, new_document)
+
+    csv_path = os.path.join(OUTPUT_DIR, DEFAULT_CSV_NAME)
+    json_path = os.path.join(OUTPUT_DIR, DEFAULT_JSON_NAME)
+    md_path = os.path.join(OUTPUT_DIR, DEFAULT_MD_NAME)
+
+    write_csv(changes, csv_path)
+
+    write_json_report(
+        changes,
+        json_path,
+        old_path,
+        new_path,
+        old_document,
+        new_document,
+    )
+
+    write_markdown_report(
+        changes,
+        md_path,
+        old_path,
+        new_path,
+        old_document,
+        new_document,
+    )
+
+    log = f"""Comparison Complete
+
+Old: {old_path}
+New: {new_path}
+Total Changes: {len(changes)}
+
+CSV:
+{csv_path}
+
+JSON:
+{json_path}
+
+Markdown:
+{md_path}
+"""
+
+    return log, md_path
 
 # ==========================================================
 # RUN

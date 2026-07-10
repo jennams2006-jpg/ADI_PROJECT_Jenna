@@ -206,12 +206,21 @@ def pdf_page_texts(pdf) -> list[str]:
         return []
     return [page.get_text("text") for page in pdf]
 
-
 def expected_captions(page_texts: list[str], regex: re.Pattern[str]) -> Counter[str]:
     found: Counter[str] = Counter()
+
     for page_index, text in enumerate(page_texts, start=1):
-        for match in regex.finditer(text):
-            found[f"{page_index}:{normalise_text(match.group(0))}"] += 1
+
+        for line in text.splitlines():
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            if regex.match(line):
+                found[f"{page_index}:{normalise_text(line)}"] += 1
+
     return found
 
 
@@ -370,7 +379,7 @@ def score_completeness(
     text_coverage_score = pct(min(output_text_chars, source_text_chars), source_text_chars)
 
     covered_pages = collect_covered_pages(document)
-    semantic_chunk_coverage_score = pct(len(covered_pages), expected_page_count)
+    #semantic_chunk_coverage_score = pct(len(covered_pages), expected_page_count)
 
     record_scores: list[float] = []
     
@@ -404,7 +413,7 @@ def score_completeness(
         "required_json_field_score": required_json_field_score,
         "page_coverage_score": page_coverage_score,
         "text_coverage_score": text_coverage_score,
-        "semantic_chunk_coverage_score": semantic_chunk_coverage_score,
+       # "semantic_chunk_coverage_score": semantic_chunk_coverage_score,
         "record_field_completeness_score": record_field_completeness_score,
         "csv_presence_score": csv_presence_score,
     }

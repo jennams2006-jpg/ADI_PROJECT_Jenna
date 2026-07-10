@@ -35,10 +35,11 @@ from openai import OpenAI
 # ==========================================================
 # CONFIGURATION
 # ==========================================================
-FILE_NAME = "pg70-100.pdf"
-PDF_PATH = r"/home/eng-6990/PROJECT/PROJECT_briefs_and_info./pg70-100.pdf"
+DEBUG = False  # Set to true to see figure extraction details
+FILE_NAME = "amba_axi_a2.pdf"
+PDF_PATH = r"/home/eng-6990/PROJECT/PROJECT_briefs_and_info./amba_axi_a2.pdf"
 
-OUTPUT_DIR = "RISCV-2026-PG70-100_output"
+OUTPUT_DIR = "amba_a2_OUTPUT"
 
 IMAGE_FOLDER  = os.path.join(OUTPUT_DIR, "images")
 TABLE_FOLDER  = os.path.join(OUTPUT_DIR, "tables")
@@ -95,12 +96,12 @@ SECTION_REGEX = re.compile(
 
 
 TABLE_REGEX = re.compile(
-    r'(Table)\s+([A-Za-z]?\d+(?:[-.]\d+)*)',
-    re.IGNORECASE
+    r"^Table\s+[A-Za-z]?\d+(?:[-.]\d+)*(?:[:.]?\s+.*)?$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 TABLE_CAPTION_REGEX = re.compile(
-    r'^Table\s+[A-Za-z]?\d+(?:[-.]\d+)*\.(?:\s|$)',
+    r'^Table\s+[A-Za-z]?\d+(?:[-.]\d+)*[:.]?\s*.*$',
     re.IGNORECASE
 )
 
@@ -419,7 +420,8 @@ def classify_figure_position(pdf_page, caption_rect, context_pt=350, scale=4):
     try:
         answer = vision(prompt, img, max_tokens=5).strip().lower()
     except Exception as e:
-        print("Position classification error:", e)
+        if DEBUG:
+            print("Position classification error:", e)
         return "none"
  
     for label in ("above", "below", "overlapping", "none"):
@@ -520,7 +522,8 @@ def locate_figure_via_vision(pdf_page, search_window, caption, caption_rect, fig
             return None
         result = json.loads(match.group())
     except Exception as e:
-        print("Vision localization error:", e)
+        if DEBUG:
+            print("Vision localization error:", e)
         return None
  
     if not result.get("found", False):
@@ -608,8 +611,9 @@ def extract_page_figures(
  
         # ---- 1st vision call: classify position only ----
         figure_position = classify_figure_position(pdf_page, caption_rect)
-        print(f"\n{caption}")
-        print("figure_position:", figure_position)
+        if DEBUG:
+            print(f"\n{caption}")
+            print("figure_position:", figure_position)
  
         search_window = None
         vision_result = None
@@ -638,9 +642,10 @@ def extract_page_figures(
         bbox = vision_result["bbox"] if vision_result else None
         vision_confidence = vision_result["confidence"] if vision_result else 0.0
  
-        print("search_window:", tuple(search_window) if search_window else None)
-        print("vision_bbox:", tuple(bbox) if bbox else None)
-        print("vision_confidence:", vision_confidence)
+        if DEBUG:
+            print("search_window:", tuple(search_window) if search_window else None)
+            print("vision_bbox:", tuple(bbox) if bbox else None)
+            print("vision_confidence:", vision_confidence)
  
         if bbox is not None:
             refined_bbox = find_geometric_bbox(
@@ -652,10 +657,12 @@ def extract_page_figures(
             )
             if refined_bbox is not None:
                 bbox = refined_bbox
-                print("refined_bbox:", tuple(bbox))
+                if DEBUG:
+                    print("refined_bbox:", tuple(bbox))
  
         if bbox is None:
-            print(f"FIGURE NOT LOCATED: {caption} on page {page_num + 1}")
+            if DEBUG:
+                print(f"FIGURE NOT LOCATED: {caption} on page {page_num + 1}")
             fig = {
                 "caption": caption,
                 "file": None,
@@ -679,10 +686,11 @@ def extract_page_figures(
             min(pdf_page.rect.y1, bbox.y1 + margin)
         )
  
-        print(
-            f"FIGURE LOCATED: {caption} on page {page_num + 1} "
-            f"via vision+geometry bbox={tuple(bbox)}"
-        )
+        if DEBUG:
+            print(
+                f"FIGURE LOCATED: {caption} on page {page_num + 1} "
+                f"via vision+geometry bbox={tuple(bbox)}"
+            )
  
         mat = fitz.Matrix(scale, scale)
         pix = pdf_page.get_pixmap(matrix=mat, clip=clip_rect, alpha=False)
@@ -714,13 +722,14 @@ def extract_page_figures(
         }
         fig["visual_requirement_hints"] = extract_visual_requirement_hints(fig)
  
-        print("\nFIGURE:", fig["caption"])
-        print("SECTION:", fig["section"])
-        print("LOCATED VIA:", fig["located_via"])
-        print("FIGURE POSITION:", fig["figure_position"])
-        print("VISION CONFIDENCE:", fig["vision_confidence"])
-        print("OCR TEXT:", fig["ocr_text"])
-        print("HINTS:", fig["visual_requirement_hints"])
+        if DEBUG:
+            print("\nFIGURE:", fig["caption"])
+            print("SECTION:", fig["section"])
+            print("LOCATED VIA:", fig["located_via"])
+            print("FIGURE POSITION:", fig["figure_position"])
+            print("VISION CONFIDENCE:", fig["vision_confidence"])
+            print("OCR TEXT:", fig["ocr_text"])
+            print("HINTS:", fig["visual_requirement_hints"])
  
         figures.append(fig)
  
@@ -1054,12 +1063,22 @@ def is_valid_vplan_section(section):
 
 def extract_table_captions(text):
     tables = []
+
     for line in text.splitlines():
         line = line.strip()
-        if TABLE_CAPTION_REGEX.match(line):
-            tables.append({"caption": line})
-    return tables
 
+        m = re.match(
+            r'^(Table\s+[A-Za-z]?\d+(?:[-.]\d+)*(?:[:.]?\s*.*)?)$',
+            line,
+            re.IGNORECASE
+        )
+
+        if m:
+            tables.append({
+                "caption": m.group(1).strip()
+            })
+
+    return tables
 
 def extract_visual_requirement_hints(figure):
     hints = []
