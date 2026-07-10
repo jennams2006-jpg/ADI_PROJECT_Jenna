@@ -17,6 +17,7 @@ This repository is part of the **APRIL AI Hub Summer Internship Programme (AI fo
   - [Completeness](#1-completeness)
   - [Accuracy](#2-accuracy)
   - [Table/Figure Capture](#3-tablefigure-capture)
+- [UI Interface](#UI-Interface)
 - [Output Files](#output-files)
 - [How to Run](#how-to-run)
 
@@ -300,6 +301,11 @@ table_figure_capture = mean(
 ```
 
 ---
+# UI Interface 
+For Extractor and Comparator
+<img width="1920" height="1080" alt="Screenshot From 2026-07-10 12-02-12" src="https://github.com/user-attachments/assets/63c19613-d73b-4cc4-82c1-992940ee0812" />
+
+
 
 # Overall Evaluation
 
