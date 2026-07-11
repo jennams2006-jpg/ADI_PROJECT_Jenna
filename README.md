@@ -1,401 +1,365 @@
 #  Analog Devices & APRILAI Project
 
-This repository is part of the **APRIL AI Hub Summer Internship Programme (AI for Productive Research & Innovation in Electronics)** and supports a research project funded by **Analog Devices**.
+This repository contains an AI-driven pipeline for extracting, comparing, and evaluating engineering specification documents. It is part of the **APRIL AI Hub Summer Internship Programme (AI for Productive Research & Innovation in Electronics)** and supports a research project funded by **Analog Devices**.
 
 ---
 
-# :mag: Table of Contents
+## 📋 Table of Contents
 
 - [Overview](#overview)
+- [Repository Structure](#repository-structure)
 - [Supported Specifications](#supported-specifications)
-- [Repository Workflow](#repository-workflow)
-- [Repository Modules](#repository-modules)
-  - [Extractor](#extractor)
-  - [Quality Checker](#quality-checker)
-  - [Comparator](#comparator)
-- [Quality Evaluation Metrics](#quality-evaluation-metrics)
-  - [Completeness](#1-completeness)
-  - [Accuracy](#2-accuracy)
-  - [Table/Figure Capture](#3-tablefigure-capture)
-- [UI Interface](#UI-Interface)
+- [Pipeline Workflow](#pipeline-workflow)
+- [Module Details](#module-details)
+  - [Extractor](#-task-1-extractor)
+  - [Comparator](#-task-3-comparator)
+  - [Quality Checker](#-task-2-quality-checker)
 - [Output Files](#output-files)
-- [How to Run](#how-to-run)
+- [Usage](#usage)
 
 ---
 
-# Overview
+## Overview
 
-This project develops an AI-driven pipeline capable of:
+This project develops an **AI-driven pipeline** capable of:
 
-- Extracting and parsing semiconductor specifications.
-- Identifying and categorising inconsistencies and ambiguities between specification versions.
-- Automatically generating a Verification Plan (vPlan).
-- Identifying coverage gaps between a specification and its derived vPlan.
+- ✅ **Extracting** and parsing semiconductor specifications from PDFs
+- ✅ **Structuring** specifications into machine-readable JSON with metadata, sections, requirements, figures, and tables
+- ✅ **Comparing** specification versions to identify evolutionary changes, wording modifications, and structural updates
+- ✅ **Evaluating** extraction quality across completeness, accuracy, and figure/table capture dimensions
+- ✅ **Generating** verification plans and identifying coverage gaps
 
 ---
 
-# :file_folder: Supported Specifications
+## Repository Structure
 
-Currently supported specification families include:
+```
+.
+├── Extractor.py              # PDF parsing & structured data extraction
+├── Comparator.py             # Version comparison & change detection
+├── Quality_Check.py          # Extraction quality evaluation
+├── UI_File.py                # User interface (UI)
+├── Change Log                # Version history and updates
+└── README.md                 # This file
+```
+
+**Output Directories:**
+- `{SPEC_NAME}_OUTPUT/` - Extractor outputs
+  - `document.json` - Structured specification data
+  - `requirements.csv` - Extracted requirements
+  - `figures/` - Isolated figures and diagrams
+  - `tables/` - CSV files for tables
+  - `images/` - Embedded images
+
+- `comparison_output/` - Comparator outputs
+  - `version_differences.json` - Detailed change report
+  - `version_differences.csv` - Tabular change summary
+  - `version_differences.md` - Human-readable markdown report
+
+---
+
+## Supported Specifications
+
+Currently tested with:
 
 - **AMBA AXI Protocol Specification**
-- **RISC-V Ratified ISA Specifications**
+- **RISC-V ISA Specifications**
 
 ---
 
-# Repository Workflow
-    
-  ```
+## Pipeline Workflow
+
+```
                 Specification PDF
                         │
                         ▼
-                +----------------+
-                |   Extractor    |
-                +----------------+
+                +─────────────────+
+                │   Extractor    │
+                +─────────────────+
                         │
-                        ▼
-                 document.json
-                 tables/
-                 figures/
-                 images/
-                 requirements.csv
-                        │
-                        ├──────────────► Comparator
-                        │                   │
-                        │                   ▼
-                        │            Change Report
-                        │
-                        ▼
-                 Quality Checker
-                        │
-                        ▼
-                Quality Metrics
-                 (Completeness,
-                    Accuracy,
-              Table/Figure Capture)
+         ┌──────────────┼──────────────┐
+         ▼              ▼              ▼
+    document.json   figures/      tables/ & images/
+         │
+         ├─────────────────────► Comparator ◄─── (Optional 2nd Version)
+         │                          │
+         │                          ▼
+         │                   Change Report (JSON/CSV/MD)
+         │
+         ▼
+    Quality Checker
+         │
+         ▼
+   Quality Report
+   (Completeness, Accuracy,
+    Table/Figure Capture)
 ```
 
 ---
 
-# Repository Modules
+## Module Details
 
-| Module | Input | Output | Purpose |
-|--------|-------|--------|---------|
-| **Extractor** | Specification PDF | `document.json`, figures, tables, images, CSV | Parses & structures specification content. |
-| **Quality Checker** | Specification PDF, Extraction output, (Optional) Gold JSON | JSON, CSV, Markdown reports | Evaluates extraction quality using completeness, accuracy, and table/figure capture metrics. |
-| **Comparator** | 2 Extracted Versions of Specification JSON | JSON, CSV, Markdown reports | Detects added, removed, and modified content between specification versions. |
+### 🔍 Task 1: Extractor
 
----
+**Purpose:** Converts specification PDFs into structured JSON with extracted content and metadata.
 
+**Input:** 
+- Technical specification PDF (AMBA AXI, RISC-V ISA, etc.)
 
+**Output:**
+- `document.json` - Complete structured document
+- `requirements.csv` - Extracted requirements table
+- `figures/` - Isolated figures with descriptions
+- `tables/` - CSV files extracted from tables
+- `images/` - Embedded images with accessibility descriptions
 
-## :page_facing_up: Task 1: Extractor
+**Key Capabilities:**
 
-The Extractor is responsible for converting specification PDFs into a structured representation.
-
----
-
-###  Core Responsibilities
-
-* **Data Ingestion:** Accepts technical specification documents such as AMBA AXI or RISC-V ISA files .
-* **Content Extraction:** Extracts text layers, structural tables, layout markers, and embedded graphics .
-* **Data Encoding:** Automatically maps and organizes all parsed elements into a single, unified `document.json` file .
-* **Asset Isolation:** Segregates data types to produce separate outputs for images, cropped figures, and tabular CSV files.
-
----
-
-###  Key Features
-
-#### 1. Figure Isolation & Asset Generation
-* **AI-Guided Cropping:** Locates figure captions and uses a vision model to verify whether the corresponding figure lives above or below the caption.
-* **Vector Snapping:** Refines bounding boxes by aligning them with the PDF's internal vector paths and lines, striving for minimal figure cut offs.
-* **Smart Descriptions:** Contextualizes every extracted diagram via GPT-4, generating clear, accessible summaries detailing waveforms, registers, and block relationships.
-
-#### 2. Native Text & Automated Rule Classifier
-* **Label Capture:** Extracts text directly from figure boundaries using the PDF's vector layer, keeping signal names, bus tags, and axis markers perfectly readable without relying on standard OCR.
-* **Requirement Classification:** Scans text for mandatory project constraints (phrases using *shall*, *must*, or *should*) and automatically sorts them into functional buckets like *Security, Performance, Protocol,* or *Memory*.
-
-#### 3. Structural Hierarchy & Table Extraction
-* **Table-to-CSV Conversion:** Programmatically discovers tables embedded within the pages and exports them as individual, clean CSV spreadsheets.
-* **Document Mapping:** Automatically cross-references acronyms, design notes, and systemic citations while cleanly dividing the document into a logical parent-child section tree based on structural headings.
----
-
-
-
-## :bar_chart: Task 2: Quality Checker
-
-The Quality Checker evaluates the quality of an extracted specification.
-
-### Inputs
-
-- Specification PDF
-- Extracted JSON
-- Optional CSV outputs
-- Optional **Gold JSON** reference
-
-> **Gold JSON** is a manually verified reference extraction used as ground truth for evaluating extraction quality using direct F1-based comparisons.
-
-### Outputs
-
-Quality reports in:
-
-- JSON
-- CSV
-- Markdown
-
----
-
-# Quality Evaluation Metrics
-
-The extraction quality is evaluated across three independent dimensions:
-
-- **Completeness**
-- **Accuracy**
-- **Table/Figure Capture**
-
----
-
-# 1. Completeness
-
-Measures whether the extractor captured all expected content from the source document.
-
-## Checks
-
-| Metric | Description |
+| Feature | Description |
 |---------|-------------|
-| **Required JSON Field Score** | All expected top-level keys (sections, requirements, figures, tables, etc.) are present. |
-| **Page Coverage Score** | Number of extracted pages matches the source document. |
-| **Text Coverage Score** | Extracted text length closely matches the source PDF text (character count). |
-| **Semantic Chunk Coverage Score** | Number of semantic chunks is consistent with the document/page structure. |
-| **Record Field Completeness Score** | Required fields for every extracted object are populated (e.g. `text`, `caption`, `page`). |
-| **CSV Presence Score** | If CSV output is expected, CSV files exist and are non-empty. |
+| **Text Extraction** | Extracts text layers, structural elements, and layout markers from PDFs |
+| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions |
+| **Table Extraction** | Discovers and exports tables as clean CSV spreadsheets |
+| **Requirement Classification** | Identifies mandatory constraints (shall, must, should) and categorizes by type (Performance, Security, Protocol, etc.) |
+| **Acronym Extraction** | Identifies and lists technical acronyms and abbreviations |
+| **Section Hierarchy** | Builds logical document structure with parent-child section relationships |
+| **Semantic Chunking** | Groups content by section and page for better organization |
+| **Metadata Capture** | Extracts PDF metadata (title, author, creation date, etc.) |
 
-## Completeness Function
-
-```text
-completeness = mean(
-    required_json_field_score,
-    page_coverage_score,
-    text_coverage_score,
-    semantic_chunk_coverage_score,
-    record_field_completeness_score,
-    csv_presence_score
-)
-```
+**Technical Details:**
+- Uses **PyMuPDF (fitz)** for PDF parsing and native text extraction
+- Uses **OpenAI GPT-4** for vision-based figure descriptions and accessibility text
+- Applies **regex patterns** for requirement and acronym detection
+- Outputs **canonical JSON format** for downstream processing
 
 ---
 
-# 2. Accuracy
+### 📊 Task 3: Comparator
 
-Measures whether the extracted information is correct.
+**Purpose:** Analyzes two specification versions to identify and categorize changes.
 
-## Without a Gold JSON
+**Input:**
+- Two `document.json` files (old and new versions)
 
-When no reference extraction is available, accuracy is estimated using heuristic validation.
+**Output:**
+- `version_differences.json` - Structured change report
+- `version_differences.csv` - Tabular summary
+- `version_differences.md` - Markdown report
 
-### Checks
+**Change Detection:**
 
-| Metric | Description |
-|---------|-------------|
-| **Page Text Fidelity Score** | Extracted text closely matches the raw PDF text. |
-| **Requirement Traceability Score** | Every extracted requirement can be located in the source PDF. |
-| **Category Consistency Score** | Automatically classified requirement categories agree with extracted categories. |
-| **Page Number Accuracy Score** | Page numbers are valid and correctly assigned. |
-| **JSON Internal Consistency Score** | Cross-checks internal references between requirements, pages, captions, tables, and figures. |
-| **CSV/JSON Consistency Score** | CSV output matches the extracted JSON. |
+The Comparator identifies and categorizes changes using:
+- **Numeric value changes** - Changes in numbers, percentages, frequencies, etc.
+- **Requirement strength changes** - Modifications to mandatory language (shall → must)
+- **Cross-reference changes** - Section/figure/table references changed
+- **Wording changes** - Minor (≥90% similar) or substantive (≥65% similar)
+- **Content changes** - Major structural or content modifications
 
-### Accuracy Function
-
-```text
-accuracy = mean(
-    page_text_fidelity_score,
-    requirement_traceability_score,
-    category_consistency_score,
-    page_number_accuracy_score,
-    json_internal_consistency_score,
-    csv_json_consistency_score
-)
-```
+**Change Classification:**
+- ✅ **Added** - New items in the new version
+- ❌ **Removed** - Items no longer in the new version
+- ✏️ **Modified** - Items changed between versions
 
 ---
 
-## With a Gold JSON
+### ✅ Task 2: Quality Checker
 
-When a reference extraction is supplied (`--gold-json`), direct comparisons replace heuristic validation.
+**Purpose:** Evaluates the quality of extracted specifications across three dimensions.
 
-### Checks
+**Input:**
+- `document.json` (extracted specification)
+- `spec.pdf` (source PDF, optional - auto-detected)
+- `requirements.csv` (optional)
+- `gold_reference.json` (optional - manually verified reference)
 
-| Metric | Description |
-|---------|-------------|
-| **Requirement F1 Score** | Precision, recall, and F1 of extracted requirements against the reference. |
-| **Figure Caption F1 Score** | Accuracy of extracted figure captions. |
-| **Table Caption F1 Score** | Accuracy of extracted table captions. |
-| **Page Text Fidelity Score** | Comparison between extracted page text and the reference page text. |
-| **JSON Internal Consistency Score** | Structural validation of the extracted JSON. |
+**Output:**
+- Quality report (JSON, CSV, Markdown, or console)
+- Three quality scores with pass/fail status
 
----
+**Quality Metrics:**
 
-## Understanding the $F_1$ Score
-
-The **$F_1$ Score** is a single metric used to evaluate how well a classification model performs.
-
-The $F_1$ score measures the balance between two goals:
-* **Precision:** Making sure your positive predictions are highly accurate (avoiding false alarms).
-* **Recall:** Making sure you actually find *all* the real positive cases (avoiding missed targets).
-
-
-### Formula for F1
-
-The $F_1$ score is the mean of Precision and Recall:
-
-$$F_1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
-
-$$\text{Precision} = \frac{\text{True Positives}}{\text{Total Captured Items}}$$
-
-$$\text{Recall} = \frac{\text{True Positives}}{\text{Total Expected Items}}$$
-
-$$\text{True Positives} = \sum_{k \in K} \min(\text{Expected}_{k}, \text{Captured}_{k})$$
-$${\text{Expected = PyMuPDF Capturing}}$$
-$${\text{Captured = Actual Output from Extraction}}$$
-
----
-
-### GOLD JSON Function
-
-```text
-accuracy = mean(
-    requirement_f1_score,
-    figure_caption_f1_score,
-    table_caption_f1_score,
-    page_text_fidelity_score,
-    json_internal_consistency_score
-)
-```
-
----
-
-# 3. Table/Figure Capture
-
-Measures how well tables and figures are detected, captioned, and exported.
-
-## Checks
-
-| Metric | Description |
-|---------|-------------|
-| **Table Detection F1 Score** | Extracted table count compared against PyMuPDF table detection. |
-| **Table Caption F1 Score** | Extracted table captions compared against captions detected in the PDF. |
-| **Table File Existence Score** | Expected CSV/table files exist and are non-empty. |
-| **Figure Caption F1 Score** | Extracted figure captions compared against captions detected in the PDF. |
-| **Image Capture F1 Score** | Extracted image count compared against embedded images detected by PyMuPDF. |
-
-## Table/Figure Capture Function
-
-```text
-table_figure_capture = mean(
-    table_detection_f1_score,
-    table_caption_f1_score,
-    table_file_existence_score,
-    figure_caption_f1_score,
-    image_capture_f1_score
-)
-```
-
----
-# UI Interface 
-For Extractor and Comparator
-<img width="1920" height="1080" alt="Screenshot From 2026-07-10 12-02-12" src="https://github.com/user-attachments/assets/f07c70b9-0e76-43d8-998f-47d502066144" />
-
-!!!TBC!!!
-
-# Overall Evaluation
-
-The evaluation framework reports three independent quality scores.
-
-| Score | Measures |
+| Metric | Measures |
 |--------|----------|
-| **Completeness** | Whether all expected document content was extracted. |
-| **Accuracy** | Whether the extracted content is correct and internally consistent. |
-| **Table/Figure Capture** | Whether tables, figures, captions, and exported files were correctly captured. |
+| **Completeness** | Whether all expected document content was extracted (80 scenarios tested) |
+| **Accuracy** | Whether extracted content is correct and internally consistent; uses F1 scoring with gold reference |
+| **Table/Figure Capture** | Whether tables, figures, and embedded images were correctly detected and exported |
 
-When a **Gold JSON** is supplied, the accuracy metric switches from heuristic validation to direct reference-based evaluation using F1 scores while retaining structural consistency checks.
+**Completeness Checks:**
+- Required JSON fields present
+- Page count accuracy
+- Text coverage (character count)
+- Record field completeness
+- CSV file existence
+
+**Accuracy Checks (without gold reference):**
+- Page text fidelity
+- Requirement traceability
+- Category consistency
+- Page number accuracy
+- JSON internal consistency
+- CSV/JSON consistency
+
+**Accuracy Checks (with gold reference):**
+- Requirement F1 score
+- Figure caption F1 score
+- Table caption F1 score
+- Page text fidelity
+- JSON internal consistency
+
+**Table/Figure Capture Checks:**
+- Table detection F1 score (vs. PyMuPDF)
+- Table caption accuracy
+- Table file existence
+- Figure caption accuracy
+- Image capture F1 score
 
 ---
 
+## Output Files
 
+### Extractor Outputs
+```
+{SPEC_NAME}_OUTPUT/
+├── document.json           # Complete structured document
+├── requirements.csv        # Extracted requirements table
+├── figures/                # Isolated figures with descriptions
+│   ├── figure_0001.png
+│   └── ...
+├── tables/                 # CSV files from tables
+│   ├── table_p1_1.csv
+│   └── ...
+└── images/                 # Embedded images
+    ├── image_0001.png
+    └── ...
+```
 
-## :chart_with_upwards_trend: :chart_with_downwards_trend: Task 3: Comparator
+### Comparator Outputs
+```
+comparison_output/
+├── version_differences.json    # Detailed change report
+├── version_differences.csv     # Tabular summary
+└── version_differences.md      # Markdown report
+```
 
-The Comparator analyzes two extracted specification versions side-by-side to identify evolutionary changes, wording modifications, and structural updates.
-
-### 📋 Core Responsibilities
-
-#### 1. Identity & Cross-Version Matching
-* **Unique Tracking:** Builds a unique identifier for every extracted item.
-* **Position-Independent Matching:** Matches equivalent content across versions, even when document positions or page numbers change.
-
-#### 2. Change Detection & Similarity Analysis
-* **Mutation Detection:** Detects added, removed, and modified content between the specification versions.
-* **Reasoning Inference:** Attempts to infer likely reasons for detected modifications.
-* **Page Similarity Calculation:** Calculates similarity percentages between corresponding pages using an old-to-new text ratio:
-  
-  $$\text{similarity} = \frac{2 \times (\text{number of matching characters})}{\text{total characters in both strings combined}}$$
-
-* **Change Categorization Rules:** Based on the calculated similarity score, changes are categorized using the following logic:
-  * **`≥ 0.90`** → `"minor_wording_change"`  
-  * **`≥ 0.65`** → `"substantive_wording_change"`
-  * **Below that** → Falls back to `"content_change"` *(unless numbers, requirement words, or references changed first, which are checked before similarity and take priority)*
----
-
-# Output Files
-
-```text
-Extractor
-├── document.json
-├── requirements.csv
-├── figures/
-├── tables/
-└── images/
-
-Quality Checker
-├── report.json
-├── report.csv
-└── report.md
-
-Comparator
-├── comparison.json
-├── comparison.csv
-└── comparison.md
+### Quality Checker Outputs
+```
+quality_report.json           # Full report (JSON)
+quality_report.csv            # Scores summary (CSV)
+quality_report.md             # Formatted report (Markdown)
 ```
 
 ---
 
-# How to Run
+## Usage
 
-## Extractor
-
+### Prerequisites
 ```bash
-python extractor.py --input data/input.json
+pip install pymupdf pandas openai python-dotenv pillow
 ```
 
-## Comparator
-
+Set up environment variable:
 ```bash
-python Spec_Version_Comparer.py VER_1_specification.json VER_2_specification.json
+export OPENAI_API_KEY="your-api-key"
 ```
 
-## Quality Checker
-
+### Extract Specification
 ```bash
-python extractor_quality_check.py \
+python Extractor.py
+```
+
+Configure in `Extractor.py`:
+```python
+FILE_NAME = "your_spec.pdf"
+PDF_PATH = r"/path/to/spec.pdf"
+OUTPUT_DIR = "SPEC_OUTPUT"
+```
+
+### Compare Specifications
+```bash
+python Comparator.py path/to/old_document.json path/to/new_document.json
+```
+
+**Options:**
+```bash
+--output-dir comparison_output
+--csv-name version_differences.csv
+--json-name version_differences.json
+--md-name version_differences.md
+```
+
+### Check Quality
+```bash
+python Quality_Check.py \
     --json data/document.json \
     --pdf docs/spec.pdf
 ```
 
-### Additional Quality Checker Options
-
+**Options:**
 ```bash
 --csv path/to/requirements.csv
---gold-json path/to/gold_reference.json
---threshold 90
---report-json path/to/output_report.json
+--gold-json path/to/gold_reference.json      # Use manual reference for F1 scoring
+--threshold 95                                # Pass threshold (default: 95%)
+--report-json path/to/output_report.json     # Save report as JSON
 ```
+
+### UI Interface
+```bash
+python UI_File.py
+```
+
+Provides graphical interface for Extractor and Comparator workflows.
+
+---
+
+## Quality Metrics Formula
+
+**Completeness:**
+```
+= mean(required_json_fields, page_coverage, text_coverage, 
+       record_field_completeness, csv_presence)
+```
+
+**Accuracy (without gold reference):**
+```
+= mean(page_text_fidelity, requirement_traceability, 
+       category_consistency, page_number_accuracy, 
+       json_internal_consistency, csv_json_consistency)
+```
+
+**Accuracy (with gold reference):**
+```
+= mean(requirement_f1, figure_caption_f1, table_caption_f1, 
+       page_text_fidelity, json_internal_consistency)
+```
+
+**Table/Figure Capture:**
+```
+= mean(table_detection_f1, table_caption_f1, table_file_existence, 
+       figure_caption_f1, image_capture_f1)
+```
+
+**F1 Score:**
+```
+F1 = 2 × (Precision × Recall) / (Precision + Recall)
+```
+
+---
+
+## Performance Considerations
+
+- **Large PDFs (100+ pages):** Extract may take 5-10 minutes depending on complexity
+- **Vision API calls:** Uses OpenAI GPT-4; costs scale with page count
+- **Quality checking:** PDF analysis is optional but improves accuracy metrics
+- **Gold reference:** Provides ground-truth F1-based scoring (requires manual verification)
+
+---
+
+## License & Attribution
+
+This repository is part of the APRIL AI Hub Summer Internship Programme and is funded by **Analog Devices**.
+
+---
+
+## Contact & Support
+
+For issues or questions, please refer to the project documentation or contact the repository maintainer.
