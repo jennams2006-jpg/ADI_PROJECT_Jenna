@@ -34,7 +34,6 @@ This project develops an **AI-driven pipeline** capable of:
 ## Repository Structure
 
 ```
-.
 ├── Extractor.py              # PDF parsing & structured data extraction
 ├── Comparator.py             # Version comparison & change detection
 ├── Quality_Check.py          # Extraction quality evaluation
@@ -64,10 +63,7 @@ Currently tested with:
 - **RISC-V ISA Specifications**
 
 ---
-
-## Pipeline Workflow
-
-# Repository Workflow
+## Repository Workflow
     
   ```
                 Specification PDF
@@ -122,7 +118,7 @@ Currently tested with:
 | Feature | Description |
 |---------|-------------|
 | **Text Extraction** | Extracts text layers, structural elements, and layout markers from PDFs |
-| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions |
+| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions (*Figure extraction is an unstable function due to the vision model*) |
 | **Table Extraction** | Discovers and exports tables as clean CSV spreadsheets |
 | **Requirement Classification** | Identifies mandatory constraints (shall, must, should) and categorizes by type (Performance, Security, Protocol, etc.) |
 | **Acronym Extraction** | Identifies and lists technical acronyms and abbreviations |
