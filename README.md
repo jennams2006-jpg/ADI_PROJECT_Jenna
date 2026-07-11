@@ -243,15 +243,20 @@ The Comparator identifies and categorizes changes using:
 ```
 ---
 
-**F1 Score:**
-```
-F1 = 2 × (Precision × Recall) / (Precision + Recall)
+### Formula for F1
 
-Precision = 
-Recall = 
-Positive Difference = 
+The $F_1$ score is the mean of Precision and Recall:
 
-```
+$$F_1 = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}$$
+
+$$\text{Precision} = \frac{\text{True Positives}}{\text{Total Captured Items}}$$
+
+$$\text{Recall} = \frac{\text{True Positives}}{\text{Total Expected Items}}$$
+
+$$\text{True Positives} = \sum_{k \in K} \min(\text{Expected}_{k}, \text{Captured}_{k})$$
+$${\text{Expected = PyMuPDF Capturing}}$$
+$${\text{Captured = Actual Output from Extraction}}$$
+
 ---
 
 ## Usage
