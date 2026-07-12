@@ -1,6 +1,6 @@
 #  Analog Devices & APRILAI Project
 
-This repository contains an AI-driven pipeline for extracting, comparing, and evaluating engineering specification documents. It is part of the **APRIL AI Hub Summer Internship Programme (AI for Product Engineering)**.
+This repository contains an AI-driven pipeline for extracting, comparing, and evaluating engineering specification documents. It is part of the **APRIL AI Hub Summer Internship Programme (AI for Production Resilience & Intelligent Learning)**.
 
 ---
 
@@ -13,7 +13,7 @@ This repository contains an AI-driven pipeline for extracting, comparing, and ev
 - [Module Details](#module-details)
   - [Extractor](#extractor)
   - [Comparator](#comparator)
-  - [Quality Checker](#quality-checker)
+  - [Quality Checker](#-quality-checker)
 - [Output Files](#output-files)
 - [Usage](#usage)
 
@@ -116,7 +116,7 @@ Currently tested with:
 | Feature | Description |
 |---------|-------------|
 | **Text Extraction** | Extracts text layers, structural elements, and layout markers from PDFs |
-| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions (*Figure extraction is an unstable function due to the variability of PDF structure) |
+| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions (*Figure extraction is an unstable function due to the variability in PDF specifications*) |
 | **Table Extraction** | Discovers and exports tables as clean CSV spreadsheets |
 | **Requirement Classification** | Identifies mandatory constraints (shall, must, should) and categorizes by type (Performance, Security, Protocol, etc.) |
 | **Acronym Extraction** | Identifies and lists technical acronyms and abbreviations |
