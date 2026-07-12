@@ -1,31 +1,33 @@
-# Why Figures aren't Essential for vPlan Generation:
-### This document addresses the high-risk figure capturing feature of the extractor.
+# Why Figures Are Not Essential for VPlan Generation
 
-* There's enough context and explanation before and after the figures in the RISC-V ISA protocol specification and the AMBA AXI specification.
-### This is seen in both specifications in the examples below:
-* **AMBA AXI:** The timing diagrams illustrating the **VALID/READY handshake** are supported by the surrounding text, which explicitly states the handshake rules (e.g., transfers occur only when both `VALID` and `READY` are asserted, and signal stability requirements while waiting). The figure simply visualises one example of behaviour already fully defined in the text.
+This document explains why the high-risk figure extraction feature is not required for generating verification plans from the **AMBA AXI** and **RISC-V ISA** specifications.
 
-* **AMBA AXI:** Burst transaction waveforms (read/write bursts) are accompanied by textual descriptions of burst types, transfer ordering, burst length, and response rules. These paragraphs define all legal protocol behaviour, whereas the figures only show representative examples.
+## Evidence from the Specifications
 
-* **RISC-V ISA:** Instruction format diagrams (showing fields such as `opcode`, `rd`, `rs1`, `rs2`, and `funct3`) duplicate information already provided in the encoding tables and instruction descriptions. The tables contain all the information needed for extracting instruction encodings.
+### AMBA AXI
 
-* **RISC-V ISA:** CSR layouts and register diagrams are reinforced by accompanying tables and descriptive text that define each field's purpose, encoding, and behaviour. The textual definitions are sufficient for understanding and extracting the architectural requirements without relying on the diagrams.
+- **VALID/READY handshake:** The timing diagrams are accompanied by text that explicitly defines the handshake rules, including when transfers occur, signal stability requirements, and protocol dependencies. The diagrams simply illustrate behaviour already specified in the text.
 
-* OCR text is extracted and provides sufficient explanation.
+- **Burst transactions:** Read/write burst waveforms are supported by textual descriptions covering burst types, transfer ordering, burst lengths, and response rules. The text defines all legal protocol behaviour, while the figures provide representative examples.
 
-* Figures are used to convey the requirements and essential information needed for vPlan generation.
+### RISC-V ISA
 
-* **Normative information is contained in text, not figures.** Both the **AMBA AXI** and **RISC-V ISA** specifications define protocol behaviour, constraints, instruction semantics, and requirements through textual descriptions, tables, and field definitions. Figures are primarily provided to aid understanding.
+- **Instruction format diagrams:** Diagrams showing fields such as `opcode`, `rd`, `rs1`, `rs2`, and `funct3` duplicate information contained in the instruction encoding tables and accompanying descriptions, which provide all information required for extraction.
 
-* **Figures are illustrative rather than exhaustive.** Timing diagrams and architecture diagrams show example transactions or layouts, whereas the accompanying text specifies all legal behaviours, corner cases, and constraints needed for verification.
+- **CSR layouts and register diagrams:** Register diagrams are supported by tables and descriptive text defining each field's encoding, purpose, and behaviour. The architectural requirements can be extracted directly from the textual definitions.
 
-* **Verification plans are derived from requirements, not graphics.** VPlan generation relies on extracting protocol rules, signal definitions, instruction semantics, encodings, and exception behaviour, all of which are explicitly documented in text and tables.
+## Key Observations
 
-* **Tables provide structured, machine-readable information.** Signal descriptions, opcode encodings, register fields, response codes, and protocol attributes can be directly extracted from tables without interpreting figures.
+- **The extracted OCR text provides sufficient context** to capture protocol behaviour, requirements, and architectural semantics without relying on figures.
 
-* **Figures add complexity with limited additional value.** Processing figures requires OCR and diagram interpretation, while the same information is typically available in the surrounding text. This increases processing effort without significantly improving the extracted verification content.
+- **Normative requirements are defined in text and tables.** Protocol rules, instruction semantics, encodings, signal definitions, and constraints are specified in textual descriptions and structured tables rather than in figures.
 
-### **Conclusion:** 
-For both the **AMBA AXI** and **RISC-V ISA** specifications, a text-first extraction approach captures the information required for VPlan generation. Figures are useful for human comprehension but are not essential for extracting verification requirements.
+- **Figures are illustrative, not normative.** Timing diagrams, register layouts, and architecture diagrams reinforce the accompanying text by showing examples or visual layouts but do not introduce additional verification requirements.
 
+- **Tables provide structured information** that can be directly extracted for VPlan generation, including signal definitions, instruction encodings, register fields, protocol attributes, and response codes.
 
+- **Figure processing increases complexity with limited benefit.** Extracting information from figures requires OCR and diagram interpretation, while the same information is already available in nearby text and tables.
+
+## Conclusion
+
+For both the **AMBA AXI** and **RISC-V ISA** specifications, a **text-first extraction approach** captures the information required for VPlan generation. Figures improve human understanding by illustrating examples and layouts but are generally **not required** for extracting verification requirements because the normative content is already defined in the accompanying text and tables.
