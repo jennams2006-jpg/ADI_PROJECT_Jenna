@@ -1,6 +1,6 @@
 #  Analog Devices & APRILAI Project
 
-This repository contains an AI-driven pipeline for extracting, comparing, and evaluating engineering specification documents. It is part of the **APRIL AI Hub Summer Internship Programme (AI for Productive Research & Innovation in Electronics)** and supports a research project funded by **Analog Devices**.
+This repository contains an AI-driven pipeline for extracting, comparing, and evaluating engineering specification documents. It is part of the **APRIL AI Hub Summer Internship Programme (AI for Product Engineering)**.
 
 ---
 
@@ -11,9 +11,9 @@ This repository contains an AI-driven pipeline for extracting, comparing, and ev
 - [Supported Specifications](#supported-specifications)
 - [Pipeline Workflow](#pipeline-workflow)
 - [Module Details](#module-details)
-  - [Extractor](#Extractor)
-  - [Comparator](#Comparator)
-  - [Quality Checker](#Quality-Checker)
+  - [Extractor](#extractor)
+  - [Comparator](#comparator)
+  - [Quality Checker](#quality-checker)
 - [Output Files](#output-files)
 - [Usage](#usage)
 
@@ -116,7 +116,7 @@ Currently tested with:
 | Feature | Description |
 |---------|-------------|
 | **Text Extraction** | Extracts text layers, structural elements, and layout markers from PDFs |
-| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions (*Figure extraction is an unstable function due to the vision model*) |
+| **Figure Isolation** | Detects figure captions and crops figures with refined bounding boxes; generates AI-powered accessibility descriptions (*Figure extraction is an unstable function due to the variability of PDF structure) |
 | **Table Extraction** | Discovers and exports tables as clean CSV spreadsheets |
 | **Requirement Classification** | Identifies mandatory constraints (shall, must, should) and categorizes by type (Performance, Security, Protocol, etc.) |
 | **Acronym Extraction** | Identifies and lists technical acronyms and abbreviations |
@@ -158,7 +158,7 @@ The Comparator identifies and categorizes changes using:
 
 ---
 
-## ✅ Quality Checker {#Quality-Checker}
+## ✅ Quality Checker
 
 **Purpose:** Evaluates the quality of extracted specifications across three dimensions.
 
