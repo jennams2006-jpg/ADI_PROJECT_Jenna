@@ -14,7 +14,6 @@ This repository contains an AI-driven pipeline for extracting, comparing, and ev
   - [Extractor](#extractor)
   - [Comparator](#comparator)
   - [Quality Checker](#-quality-checker)
-- [Output Files](#output-files)
 - [Usage](#usage)
 
 ---
