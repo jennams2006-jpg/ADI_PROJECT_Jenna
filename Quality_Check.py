@@ -10,9 +10,13 @@ The checker reports three final percentages and pass/fail labels:
            page_coverage_score,
            text_coverage_score,
            semantic_chunk_coverage_score,
+<<<<<<< HEAD
            record_field_completeness_score,
            cross_reference_recall_score,
            requirement_recall_score
+=======
+           record_field_completeness_score
+>>>>>>> upstream/main
        )
 
 2. Accuracy percentage
@@ -600,14 +604,21 @@ def score_completeness(
         "text_coverage_score": text_coverage_score,
         "semantic_chunk_coverage_score": semantic_chunk_coverage_score,
         "record_field_completeness_score": record_field_completeness_score,
+<<<<<<< HEAD
         "cross_reference_recall_score": cross_reference_recall_score(pdf_page_texts_value, document.get("cross_references", [])),
         "requirement_recall_score": requirement_recall_score(pdf_page_texts_value, top_requirements),
+=======
+>>>>>>> upstream/main
     }
 
     return Score(
         name="completeness",
         percentage=mean(component_scores.values()),
+<<<<<<< HEAD
         formula="mean(required_json_field, page_coverage, text_coverage, semantic_chunk_coverage, record_field_completeness, cross_reference_recall, requirement_recall)",
+=======
+        formula="mean(required_json_field, page_coverage, text_coverage, semantic_chunk_coverage, record_field_completeness)",
+>>>>>>> upstream/main
         details=component_scores,
     )
 
@@ -713,11 +724,16 @@ def score_accuracy(
             "category_consistency_score": category_consistency_score,
             "page_number_accuracy_score": page_number_accuracy_score,
             "json_internal_consistency_score": json_internal_consistency_score,
+<<<<<<< HEAD
             "category_consistency_priority_score": category_consistency_priority_score,
             "axi_signal_fidelity_score": axi_signal_fidelity_score(pdf_page_texts_value, top_requirements),
             "riscv_csr_fidelity_score": riscv_csr_fidelity_score(pdf_page_texts_value, top_requirements),
         }
         formula = "mean(page_text_fidelity, requirement_traceability, category_consistency, page_number_accuracy, json_internal_consistency, category_consistency_priority, axi_signal_fidelity, riscv_csr_fidelity)"
+=======
+        }
+        formula = "mean(page_text_fidelity, requirement_traceability, category_consistency, page_number_accuracy, json_internal_consistency)"
+>>>>>>> upstream/main
 
     return Score(name="accuracy", percentage=mean(component_scores.values()), formula=formula, details=component_scores)
 
