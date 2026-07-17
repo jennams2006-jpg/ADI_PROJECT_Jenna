@@ -1,0 +1,6 @@
+0,1
+Privilege Mode,xSSE
+M,0
+S or HS,menvcfg.SSE
+VS,henvcfg.SSE
+U or VU,senvcfg.SSE
